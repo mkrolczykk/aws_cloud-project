@@ -1,0 +1,15 @@
+# environment
+.idea/
+*.iml
+target/
+venv
+# local
+# Byte-compiled / optimized / DLL files
+__pycache__
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+# other
+temp.txt
+.DS_Store
