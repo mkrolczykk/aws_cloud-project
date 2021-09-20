@@ -6,6 +6,10 @@
             "Type": "String",
             "Default": "arn:aws:iam::571632058847:role/lambda-role-mkrolczyk"
         },
+        "FirehoseDeliveryStreamRole": {
+            "Type": "String",
+            "Default": "arn:aws:iam::571632058847:role/firehose-delivery-stream-mkrolczyk"
+        },
         "SourceItemStreamName": {
             "Type": "String",
             "Default": "SourceItemStream-mkrolczyk"
@@ -22,7 +26,7 @@
         "S3ResourcesBucketName": {
             "Type": "String",
             "Default": "mkrolczyk-project-resources",
-            "Description": "Name of S3 bucket to create for access project resources"
+            "Description": "Name of already existing S3 bucket with project resources"
         },
         "LambdaServiceFilterIpFunctionName": {
             "Type": "String",
@@ -65,13 +69,6 @@
               "BucketName": { "Ref" : "S3DataBucketName" }
             } 
         },
-        "ResourcesBucket": {
-            "Type": "AWS::S3::Bucket",
-            "Properties": {
-              "AccessControl": "Private",
-              "BucketName": { "Ref" : "S3ResourcesBucketName" }
-            } 
-        },
         "LambdaServiceFilterIpsFunction": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
@@ -91,6 +88,28 @@
                 "Handler": "lambda_service_filter.handler",
                 "Runtime": "python3.9",
                 "Timeout": 30
+            }
+        },
+        "FirehouseItemsDeliveryStream": {
+            "Type": "AWS::KinesisFirehose::DeliveryStream",
+            "Properties": {
+                "DeliveryStreamName": { "Ref" : "FirehouseItemsDeliveryStreamName" },
+                "S3DestinationConfiguration": {
+                    "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
+                    "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" }
+                },
+                "Prefix": "items_filtered_data/"
+            }
+        },
+        "FirehouseReviewsDeliveryStream": {
+            "Type": "AWS::KinesisFirehose::DeliveryStream",
+            "Properties": {
+                "DeliveryStreamName": { "Ref" : "FirehouseReviewsDeliveryStreamName" },
+                "S3DestinationConfiguration": {
+                    "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
+                    "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" }
+                },
+                "Prefix": "reviews_filtered_data/"
             }
         }
     },
