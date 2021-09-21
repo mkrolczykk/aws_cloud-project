@@ -3,6 +3,7 @@
 *.iml
 target/
 venv
+env
 # local
 # Byte-compiled / optimized / DLL files
 __pycache__
