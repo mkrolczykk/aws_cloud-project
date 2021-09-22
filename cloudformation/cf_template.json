@@ -10,9 +10,21 @@
             "Type": "String",
             "Default": "arn:aws:iam::571632058847:role/firehose-delivery-stream-mkrolczyk"
         },
-        "SourceItemStreamName": {
+        "KinesisAnalyticsRole": {
             "Type": "String",
-            "Default": "SourceItemStream-mkrolczyk"
+            "Default": "arn:aws:iam::571632058847:role/kinesis-analytics-mkrolczyk"
+        },
+        "emrRole": {
+             "Type" : "String",
+             "Default": "EMR_DefaultRole"
+        },
+        "emrEc2Role": {
+             "Type" : "String",
+             "Default": "EMR_EC2_DefaultRole"
+        },
+        "SourceItemViewsStreamName": {
+            "Type": "String",
+            "Default": "SourceItemViewsStream-mkrolczyk"
         },
         "SourceReviewStreamName": {
             "Type": "String",
@@ -68,37 +80,45 @@
             "Type" : "String",
             "Default" : "false"
         },
-        "emrRole": {
-             "Type" : "String",
-             "Default": "EMR_DefaultRole"
-        },
-        "emrEc2Role": {
-             "Type" : "String",
-             "Default": "EMR_EC2_DefaultRole"
-        },
         "LambdaServiceFilterIpFunctionName": {
             "Type": "String",
             "Default": "LambdaServiceFilterIpFunction-mkrolczyk"
         },
         "FirehouseItemsDeliveryStreamName": {
             "Type": "String",
-            "Default": "FirehouseItemsDeliveryStreamName-mkrolczyk"
+            "Default": "FirehouseItemsDeliveryStream-mkrolczyk"
         },
         "FirehouseReviewsDeliveryStreamName": {
             "Type": "String",
-            "Default": "FirehouseReviewsDeliveryStreamName-mkrolczyk"
+            "Default": "FirehouseReviewsDeliveryStream-mkrolczyk"
         },
         "DynamoDBSuspiciousIpsTableName": {
             "Type": "String",
             "Default": "DynamoDBSuspiciousIpsTable-mkrolczyk"
+        },
+        "DynamoDBTop10ItemsResultTableName": {
+            "Type": "String",
+            "Default": "DynamoDBTop10ItemsResultTable-mkrolczyk"
+        },
+        "DynamoDBTop10CategoriesResultTableName": {
+            "Type": "String",
+            "Default": "DynamoDBTop10CategoriesResultTable-mkrolczyk"
+        },
+        "KinesisViewsAnalyticsName": {
+            "Type": "String",
+            "Default": "KinesisViewsAnalytics-mkrolczyk"
+        },
+        "LambdaServiceForKinesisViewsAnalyticsOutputName": {
+            "Type": "String",
+            "Default": "LambdaServiceForKinesisViewsAnalyticsOutput-mkrolczyk"
         }
     },
     "Resources": {
-        "SourceItemStream": {
+        "SourceItemViewsStream": {
             "Type": "AWS::Kinesis::Stream",
             "RetentionPeriodHours": 24,
             "ShardCount": 1,
-            "Properties": { "Name" : { "Ref" : "SourceItemStreamName" } }
+            "Properties": { "Name" : { "Ref" : "SourceItemViewsStreamName" } }
         },
         "SourceReviewStream": {
             "Type": "AWS::Kinesis::Stream",
@@ -117,7 +137,7 @@
                         {
                             "Event": "s3:ObjectCreated:*",
                             "Filter": {
-                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "items_filtered_data/" }] }
+                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "views_filtered_data/" }] }
                             },
                             "Function": { "Fn::GetAtt": ["LambdaServiceTriggerEmrJob", "Arn"] }
                         }
@@ -201,6 +221,66 @@
                 }
             }
         },
+        "DynamoDBTop10ItemsResultTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "TableName": { "Ref": "DynamoDBTop10ItemsResultTableName" },
+                "KeySchema": [
+                    {
+                        "AttributeName": "item_id",
+                        "KeyType": "HASH"
+                    }
+                ],
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "item_id",
+                        "AttributeType": "S"
+                    },
+                    {
+                        "AttributeName": "total_views",
+                        "AttributeType": "S"
+                    }
+                ],
+                "TimeToLiveSpecification": {
+                    "AttributeName": "TimeToLive",
+                    "Enabled": true
+                },
+                "ProvisionedThroughput": {
+                    "ReadCapacityUnits": "2",
+                    "WriteCapacityUnits": "2"
+                }
+            }
+        },
+        "DynamoDBTop10CategoriesResultTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "TableName": { "Ref": "DynamoDBTop10CategoriesResultTableName" },
+                "KeySchema": [
+                    {
+                        "AttributeName": "category",
+                        "KeyType": "HASH"
+                    }
+                ],
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "category",
+                        "AttributeType": "S"
+                    },
+                    {
+                        "AttributeName": "total_views",
+                        "AttributeType": "S"
+                    }
+                ],
+                "TimeToLiveSpecification": {
+                    "AttributeName": "TimeToLive",
+                    "Enabled": true
+                },
+                "ProvisionedThroughput": {
+                    "ReadCapacityUnits": "2",
+                    "WriteCapacityUnits": "2"
+                }
+            }
+        },
         "LambdaServiceFilterIpsFunction": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
@@ -241,7 +321,7 @@
                             },
                             ":stream/",
                             {
-                                "Ref": "SourceItemStreamName"
+                                "Ref": "SourceItemViewsStreamName"
                             }
                         ]
                     ]
@@ -280,9 +360,10 @@
                 "DeliveryStreamName": { "Ref" : "FirehouseItemsDeliveryStreamName" },
                 "S3DestinationConfiguration": {
                     "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
-                    "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" }
+                    "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" },
+                    "BufferingHints": { "IntervalInSeconds": 60}
                 },
-                "Prefix": "items_filtered_data/"
+                "Prefix": "views_filtered_data/"
             }
         },
         "FirehouseReviewsDeliveryStream": {
@@ -291,9 +372,166 @@
                 "DeliveryStreamName": { "Ref" : "FirehouseReviewsDeliveryStreamName" },
                 "S3DestinationConfiguration": {
                     "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
-                    "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" }
+                    "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" },
+                    "BufferingHints": { "IntervalInSeconds": 60}
                 },
                 "Prefix": "reviews_filtered_data/"
+            }
+        },
+        "KinesisViewsAnalytics": {
+            "Type": "AWS::KinesisAnalytics::Application",
+            "Properties": {
+                "ApplicationName": { "Ref" : "KinesisViewsAnalyticsName" },
+                "ApplicationDescription": "Identify the most popular items and categories by views",
+                "Inputs": [
+                    {
+                        "InputSchema": {
+                            "RecordColumns": [
+                                {
+                                    "Name": "device_id",
+                                    "SqlType": "VARCHAR(50)"
+                                },
+                                {
+                                    "Name": "device_type",
+                                    "SqlType": "VARCHAR(50)"
+                                },
+                                {
+                                    "Name": "item_id",
+                                    "SqlType": "VARCHAR(10)"
+                                },
+                                {
+                                    "Name": "ts",
+                                    "SqlType": "TIMESTAMP"
+                                },
+                                {
+                                    "Name": "user_ip",
+                                    "SqlType": "VARCHAR(50)"
+                                }
+                            ],
+                            "RecordFormat": {
+                                "MappingParameters": {
+                                    "CSVMappingParameters": {
+                                        "RecordColumnDelimiter": ",",
+                                        "RecordRowDelimiter": "\n"
+                                    }
+                                },
+                                "RecordFormatType": "CSV"
+                            }
+                        },
+                        "KinesisFirehoseInput": {
+                            "ResourceARN": { "Fn::GetAtt" : ["FirehouseItemsDeliveryStream", "Arn"] },
+                            "RoleARN": { "Ref" : "KinesisAnalyticsRole" }
+                        },
+                        "NamePrefix": "firehouse_views_delivery_stream"
+                    }
+                ],
+                "ApplicationCode": {}
+            }
+        },
+        "KinesisAnalyticsApplicationReferenceDataSource": {
+            "Type": "AWS::KinesisAnalytics::ApplicationReferenceDataSource",
+            "Properties": {
+                "ApplicationName": { "Ref" : "KinesisViewsAnalytics" },
+                "ReferenceDataSource": {
+                    "ReferenceSchema" : {
+                        "RecordColumns" : [
+                            {
+                                "Name": "item_id",
+                                "SqlType": "VARCHAR(10)"
+                            },
+                            {
+                                "Name": "title",
+                                "SqlType": "VARCHAR(50)"
+                            },
+                            {
+                                "Name": "description",
+                                "SqlType": "VARCHAR(100)"
+                            },
+                            {
+                                "Name": "category",
+                                "SqlType": "VARCHAR(50)"
+                            }
+                        ],
+                        "RecordFormat": {
+                            "RecordFormatType": "CSV",
+                            "MappingParameters": {
+                                "CSVMappingParameters": {
+                                    "RecordColumnDelimiter": ",",
+                                    "RecordRowDelimiter": "\n"
+                                }
+                            }
+                        }
+                    },
+                    "S3ReferenceDataSource" : {
+                        "BucketARN": { "Fn::GetAtt" : ["S3ResourcesBucketName", "Arn"] },
+                        "FileKey": "items.csv",
+                        "ReferenceRoleARN": { "Ref" : "KinesisAnalyticsRole" }
+                    },
+                    "TableName" : "items_information"
+                }
+            }
+        },
+        "KinesisViewsAnalyticsItemsOutput": {
+            "Type": "AWS::KinesisAnalytics::ApplicationOutput",
+            "DependsOn": "KinesisViewsAnalytics",
+            "Properties": {
+                "ApplicationName": { "Ref" : "KinesisViewsAnalyticsName" },
+                "Output": {
+                    "DestinationSchema": { "RecordFormatType": "JSON" },
+                    "LambdaOutput": {
+                        "ResourceARN": { "Fn::GetAtt" : ["LambdaServiceForKinesisViewsAnalyticsOutput", "Arn"] },
+                        "RoleARN": { "Ref" : "KinesisAnalyticsRole" }
+                    },
+                    "Name": "most_popular_items_output_stream"
+                }
+            }
+        },
+        "KinesisViewsAnalyticsCategoriesOutput": {
+            "Type": "AWS::KinesisAnalytics::ApplicationOutput",
+            "DependsOn": "KinesisViewsAnalytics",
+            "Properties": {
+                "ApplicationName": { "Ref" : "KinesisViewsAnalyticsName" },
+                "Output": {
+                    "DestinationSchema": { "RecordFormatType": "JSON" },
+                    "LambdaOutput": {
+                        "ResourceARN": { "Fn::GetAtt" : ["LambdaServiceForKinesisViewsAnalyticsOutput", "Arn"] },
+                        "RoleARN": { "Ref" : "KinesisAnalyticsRole" }
+                    },
+                    "Name": "most_popular_categories_output_stream"
+                }
+            }
+        },
+        "LambdaServiceForKinesisViewsAnalyticsOutput": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "FunctionName": { "Ref" : "LambdaServiceForKinesisViewsAnalyticsOutputName" },
+                "Role": {"Ref" : "LambdaServiceRole"},
+                "Environment": {
+                    "SNSTopic": { "Ref" : "SNSHighTrafficTopic" },
+                    "DynamoDBTop10ItemsResultTableName": { "Ref": "DynamoDBTop10ItemsResultTableName" },
+                    "DynamoDBTop10CategoriesResultTableName": { "Ref": "DynamoDBTop10CategoriesResultTableName" }
+
+                },
+                "Code": {
+                    "S3Bucket": { "Ref" : "S3ResourcesBucketName" },
+                    "S3Key": "lambda_for_kinesis_analytics_output.zip"
+                },
+                "Handler": "lambda_for_kinesis_analytics_output.handler",
+                "Runtime": "python3.9",
+                "Timeout": 30
+            }
+        },
+        "SNSHighTrafficTopic": {
+            "Type": "AWS::SNS::Topic",
+            "TopicName": "High traffic topic",
+            "DisplayName": "High traffic topic",
+            "Properties": {
+                "Subscription" : [
+                    {
+                        "Endpoint" : "mkrolczyk@griddynamics.com",
+                        "Protocol" : "email"
+                    }
+                ]
             }
         }
     }

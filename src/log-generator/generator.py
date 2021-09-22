@@ -29,8 +29,8 @@ from datetime import datetime, timedelta
 S3_BUCKET = "mkrolczyk-data-capstone"
 S3_PREFIX = "logs-data"
 
-KINESIS_ITEM_STREAM = "SourceItemStream-mkrolczyk"
-KINESIS_REVIEW_STREAM = "SourceReviewStream-mkrolczyk"
+KINESIS_ITEM_STREAM = "SourceItemViewsStream-mkrolczyk"  # Views of particular item (item_id, timestamp, device_type, device_id, user_ip)
+KINESIS_REVIEW_STREAM = "SourceReviewStream-mkrolczyk"  # Stream of published reviews (item_id, timestamp, device_type, device_id, user_ip, review_title, review_text, review_stars)
 
 N_USERS = 50
 N_ITEMS = 100
