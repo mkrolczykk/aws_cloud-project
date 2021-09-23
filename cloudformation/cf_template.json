@@ -25,7 +25,7 @@
         "glueRole": {
              "Type": "String",
              "Description": "Glue execution role",
-             "Default": "arn:aws:iam::571632058847:role/YOUR_ROLE"
+             "Default": "arn:aws:iam::571632058847:role/glueRole-mkrolczyk"
         },
         "SourceItemViewsStreamName": {
             "Type": "String",
@@ -108,6 +108,10 @@
         "DynamoDBTop10CategoriesResultTableName": {
             "Type": "String",
             "Default": "DynamoDBTop10CategoriesResultTable-mkrolczyk"
+        },
+        "DynamoDBAvgRatingsTableName": {
+            "Type": "String",
+            "Default": "DynamoDBAvgRatingsTable-mkrolczyk"
         },
         "KinesisViewsAnalyticsName": {
             "Type": "String",
@@ -295,6 +299,36 @@
                 "ProvisionedThroughput": {
                     "ReadCapacityUnits": "2",
                     "WriteCapacityUnits": "2"
+                }
+            }
+        },
+        "DynamoDBAvgRatingsTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "TableName": { "Ref": "DynamoDBAvgRatingsTableName" },
+                "KeySchema": [
+                    {
+                        "AttributeName": "item_id",
+                        "KeyType": "HASH"
+                    },
+                    {
+                        "AttributeName": "rating_average",
+                        "KeyType": "RANGE"
+                    }
+                ],
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "item_id",
+                        "AttributeType": "S"
+                    },
+                    {
+                        "AttributeName": "rating_average",
+                        "AttributeType": "S"
+                    }
+                ],
+                 "ProvisionedThroughput": {
+                     "ReadCapacityUnits": "2",
+                     "WriteCapacityUnits": "2"
                 }
             }
         },
@@ -576,6 +610,9 @@
                     "S3Targets": [
                         {
                             "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/views_filtered_data"]] }
+                        },
+                        {
+                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/reviews_filtered_data"]] }
                         }
                     ],
                     "DynamoDBTargets": [
@@ -590,9 +627,18 @@
             "Type": "AWS::Athena::NamedQuery",
             "Properties": {
                 "Database": { "Ref" : "GlueDatabaseName" },
-                "Description": "Calculate distribution of views by device types",
                 "Name": "DistributionOfViewsByDeviceTypesQuery",
-                "QueryString": "SELECT device_type, COUNT(*) AS views FROM views_filtered_data GROUP BY device_type ORDER BY views DESC"
+                "Description": "Calculate distribution of views by device types",
+                "QueryString": "SELECT device_type, COUNT(*) AS views FROM views_filtered_data GROUP BY device_type ORDER BY views DESC;"
+            }
+        },
+        "AthenaItemsAverageRatingsQuery": {
+            "Type": "AWS::Athena::NamedQuery",
+            "Properties": {
+                "Database": { "Ref" : "GlueDatabaseName" },
+                "Name": "ItemsAverageRatingsQuery",
+                "Description": "Collect average ratings for items, based on reviews",
+                "QueryString": "SELECT item_id, ROUND(AVG(review_stars), 2) AS rating_average FROM( SELECT * FROM reviews_filtered_data WHERE review_title IS NOT NULL AND review_text IS NOT NULL) GROUP BY item_id ORDER BY rating_average DESC;"
             }
         }
     }
