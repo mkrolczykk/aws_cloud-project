@@ -22,6 +22,11 @@
              "Type" : "String",
              "Default": "EMR_EC2_DefaultRole"
         },
+        "glueRole": {
+             "Type": "String",
+             "Description": "Glue execution role",
+             "Default": "arn:aws:iam::571632058847:role/YOUR_ROLE"
+        },
         "SourceItemViewsStreamName": {
             "Type": "String",
             "Default": "SourceItemViewsStream-mkrolczyk"
@@ -111,6 +116,18 @@
         "LambdaServiceForKinesisViewsAnalyticsOutputName": {
             "Type": "String",
             "Default": "LambdaServiceForKinesisViewsAnalyticsOutput-mkrolczyk"
+        },
+        "GlueDatabaseName": {
+            "Type": "String",
+            "Default": "GlueDatabase-mkrolczyk"
+        },
+        "S3FilteredViewsCrawlerName": {
+            "Type": "String",
+            "Default": "S3FilteredViewsCrawler-mkrolczyk"
+        },
+        "S3FilteredReviewsCrawlerName": {
+            "Type": "String",
+            "Default": "S3FilteredReviewsCrawler-mkrolczyk"
         }
     },
     "Resources": {
@@ -532,6 +549,50 @@
                         "Protocol" : "email"
                     }
                 ]
+            }
+        },
+        "GlueDatabase": {
+            "Type": "AWS::Glue::Database",
+            "Properties": {
+                "CatalogId": {
+                    "Ref": "AWS::AccountId"
+                },
+                "DatabaseInput": {
+                    "Name": { "Ref" : "GlueDatabaseName" }
+                }
+            }
+        },
+        "S3FilteredViewsCrawler": {
+            "Type": "AWS::Glue::Crawler",
+            "Properties": {
+                "Name": { "Ref" : "S3FilteredViewsCrawlerName" },
+                "Role": {"Ref": "glueRole"},
+                "DatabaseName": { "Ref" : "GlueDatabase" },
+                "SchemaChangePolicy": {
+                    "UpdateBehavior": "LOG",
+                    "DeleteBehavior": "LOG"
+                },
+                "Targets": {
+                    "S3Targets": [
+                        {
+                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/views_filtered_data"]] }
+                        }
+                    ],
+                    "DynamoDBTargets": [
+                        {
+                            "Path": { "Ref" : "DynamoDBSuspiciousIpsTableName" }
+                        }
+                    ]
+                }
+            }
+        },
+        "AthenaDistributionOfViewsQuery": {
+            "Type": "AWS::Athena::NamedQuery",
+            "Properties": {
+                "Database": { "Ref" : "GlueDatabaseName" },
+                "Description": "Calculate distribution of views by device types",
+                "Name": "DistributionOfViewsByDeviceTypesQuery",
+                "QueryString": "SELECT device_type, COUNT(*) AS views FROM views_filtered_data GROUP BY device_type ORDER BY views DESC"
             }
         }
     }

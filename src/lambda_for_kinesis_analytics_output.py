@@ -7,12 +7,12 @@ import json
 SNS_TOPIC_ARN = os.environ['SNSHighTrafficTopic']
 ITEMS_TABLE_NAME = os.environ['DynamoDBTop10ItemsResultTableName']
 CATEGORIES_TABLE_NAME = os.environ['DynamoDBTop10CategoriesResultTableName']
-VIEWS_LIMIT = 1000
 
 def handler(event, context):
     TOP_ITEMS_TABLE = boto3.resource('dynamodb').Table(ITEMS_TABLE_NAME)
     TOP_CATEGORIES_TABLE = boto3.resource('dynamodb').Table(CATEGORIES_TABLE_NAME)
     sns_client = boto3.client('sns')
+    VIEWS_LIMIT = 1000
     items_summed_views = 0
     output_result = []
     success_operations = 0
@@ -42,5 +42,5 @@ def handler(event, context):
             Message='Warning: Number of views exceeds 1000 for top 10 items'
         )
 
-    print("Lambda results: \nDelivered records: {0}\nFailed records: {1}".format(success_operations, failed_operations))
+    print("Lambda summary: \nDelivered records: {0}\nFailed records: {1}".format(success_operations, failed_operations))
     return {'data': output_result}
