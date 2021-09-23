@@ -18,4 +18,4 @@ CREATE OR REPLACE PUMP "CATEGORIES_STREAM_PUMP" AS
                 10,
                 60
             )
-        )
+        );
