@@ -8,11 +8,11 @@
         },
         "FirehoseDeliveryStreamRole": {
             "Type": "String",
-            "Default": "arn:aws:iam::571632058847:role/firehose-delivery-stream-mkrolczyk"
+            "Default": "arn:aws:iam::571632058847:role/firehose-delivery-stream-role-mkrolczyk"
         },
         "KinesisAnalyticsRole": {
             "Type": "String",
-            "Default": "arn:aws:iam::571632058847:role/kinesis-analytics-mkrolczyk"
+            "Default": "arn:aws:iam::571632058847:role/kinesis-analytics-role-mkrolczyk"
         },
         "emrRole": {
              "Type" : "String",
@@ -25,7 +25,7 @@
         "glueRole": {
              "Type": "String",
              "Description": "Glue execution role",
-             "Default": "arn:aws:iam::571632058847:role/glueRole-mkrolczyk"
+             "Default": "arn:aws:iam::571632058847:role/glue-role-mkrolczyk"
         },
         "SourceItemViewsStreamName": {
             "Type": "String",
@@ -125,13 +125,13 @@
             "Type": "String",
             "Default": "GlueDatabase-mkrolczyk"
         },
-        "S3FilteredViewsCrawlerName": {
+        "S3FilteredDataCrawlerName": {
             "Type": "String",
-            "Default": "S3FilteredViewsCrawler-mkrolczyk"
+            "Default": "S3FilteredDataCrawler-mkrolczyk"
         },
-        "S3FilteredReviewsCrawlerName": {
+        "LambdaServiceItemsAvgRatingsFunctionName": {
             "Type": "String",
-            "Default": "S3FilteredReviewsCrawler-mkrolczyk"
+            "Default": "LambdaServiceItemsAvgRatingsFunction-mkrolczyk"
         }
     },
     "Resources": {
@@ -149,7 +149,7 @@
         },
         "DataBucket": {
             "Type": "AWS::S3::Bucket",
-            "DependsOn": "S3ForLambdaTriggerEmrPermission",
+            "DependsOn": ["S3ForLambdaTriggerEmrPermission", "LambdaServiceItemsAvgRatingsPermission"],
             "Properties": {
                 "AccessControl": "Private",
                 "BucketName": { "Ref" : "S3DataBucketName" },
@@ -161,6 +161,13 @@
                                 "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "views_filtered_data/" }] }
                             },
                             "Function": { "Fn::GetAtt": ["LambdaServiceTriggerEmrJob", "Arn"] }
+                        },
+                        {
+                            "Event": "s3:ObjectCreated:*",
+                            "Filter": {
+                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "reviews_filtered_data/" }] }
+                            },
+                            "Function": { "Fn::GetAtt": ["LambdaServiceItemsAvgRatingsFunction", "Arn"] }
                         }
                     ]
                 }
@@ -168,12 +175,22 @@
         },
         "S3ForLambdaTriggerEmrPermission": {
             "Type": "AWS::Lambda::Permission",
-            "DependsOn": "LambdaServiceTriggerEmrJob",
             "Properties": {
-               "FunctionName": { "Fn::GetAtt": ["LambdaServiceTriggerEmrJob", "Arn"] },
-               "Action": "lambda:InvokeFunction",
-               "Principal": "s3.amazonaws.com",
-               "SourceArn": { "Fn::Sub": "arn:aws:s3:::${S3BucketName}" }
+                "FunctionName": { "Fn::GetAtt": ["LambdaServiceTriggerEmrJob", "Arn"] },
+                "Action": "lambda:InvokeFunction",
+                "Principal": "s3.amazonaws.com",
+                "SourceAccount": { "Ref": "AWS::AccountId" },
+                "SourceArn": { "Fn::Sub": "arn:aws:s3:::${S3BucketName}" }
+            }
+        },
+        "LambdaServiceItemsAvgRatingsPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "FunctionName": { "Fn::GetAtt": ["LambdaServiceItemsAvgRatingsFunction", "Arn"] },
+                "Action": "lambda:InvokeFunction",
+                "Principal": "s3.amazonaws.com",
+                "SourceAccount": { "Ref": "AWS::AccountId" },
+                "SourceArn": { "Fn::Sub": "arn:aws:s3:::${S3BucketName}" }
             }
         },
         "Ec2Instance": {
@@ -194,7 +211,7 @@
                     "Variables": {
                         "S3ResourcesBucketName": { "Ref" : "S3ResourcesBucketName" },
                         "S3DataBucketName": { "Ref" : "S3DataBucketName" },
-                        "DynamoDBSuspiciousIdsTable": { "Ref" : "DynamoDBSuspiciousIdsTable" },
+                        "DynamoDBSuspiciousIdsTable": { "Ref" : "DynamoDBSuspiciousIpsTableName" },
                         "emrClusterName": { "Ref" : "emrClusterName" },
                         "EC2KeyName": { "Ref" : "EC2KeyName" },
                         "emrMasterInstanceCount": { "Ref": "emrMasterInstanceCount" },
@@ -481,6 +498,7 @@
         },
         "KinesisAnalyticsApplicationReferenceDataSource": {
             "Type": "AWS::KinesisAnalytics::ApplicationReferenceDataSource",
+            "DependsOn": { "Ref" : "KinesisViewsAnalytics" },
             "Properties": {
                 "ApplicationName": { "Ref" : "KinesisViewsAnalytics" },
                 "ReferenceDataSource": {
@@ -561,7 +579,6 @@
                     "SNSTopic": { "Ref" : "SNSHighTrafficTopic" },
                     "DynamoDBTop10ItemsResultTableName": { "Ref": "DynamoDBTop10ItemsResultTableName" },
                     "DynamoDBTop10CategoriesResultTableName": { "Ref": "DynamoDBTop10CategoriesResultTableName" }
-
                 },
                 "Code": {
                     "S3Bucket": { "Ref" : "S3ResourcesBucketName" },
@@ -596,10 +613,10 @@
                 }
             }
         },
-        "S3FilteredViewsCrawler": {
+        "S3FilteredDataCrawler": {
             "Type": "AWS::Glue::Crawler",
             "Properties": {
-                "Name": { "Ref" : "S3FilteredViewsCrawlerName" },
+                "Name": { "Ref" : "S3FilteredDataCrawlerName" },
                 "Role": {"Ref": "glueRole"},
                 "DatabaseName": { "Ref" : "GlueDatabase" },
                 "SchemaChangePolicy": {
@@ -639,6 +656,30 @@
                 "Name": "ItemsAverageRatingsQuery",
                 "Description": "Collect average ratings for items, based on reviews",
                 "QueryString": "SELECT item_id, ROUND(AVG(review_stars), 2) AS rating_average FROM( SELECT * FROM reviews_filtered_data WHERE review_title IS NOT NULL AND review_text IS NOT NULL) GROUP BY item_id ORDER BY rating_average DESC;"
+            }
+        },
+        "LambdaServiceItemsAvgRatingsFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "FunctionName": { "Ref" : "LambdaServiceItemsAvgRatingsFunctionName" },
+                "Role": {"Ref" : "LambdaServiceRole"},
+                "Environment": {
+                    "Variables": {
+                        "DynamoDBAvgRatingsTableName": { "Ref" : "DynamoDBAvgRatingsTableName"},
+                        "GlueCrawler": { "Ref" : "S3FilteredDataCrawlerName"},
+                        "GlueDB": { "Ref" : "GlueDatabaseName" },
+                        "AthenaItemsAverageRatingsQueryId": { "Fn::GetAtt": ["AthenaItemsAverageRatingsQuery", "NamedQueryId"] },
+                        "S3Bucket": { "Ref" : "S3DataBucketName" }
+                    }
+                },
+                "Code": {
+                  "S3Bucket": { "Ref" : "S3ResourcesBucketName" },
+                  "S3Key": "lambda_service_items_avg_ratings.zip"
+                },
+                "Handler": "lambda_service_items_avg_ratings.handler",
+                "Runtime": "python3.9",
+                "MemorySize": 128,
+                "Timeout": 600
             }
         }
     }
