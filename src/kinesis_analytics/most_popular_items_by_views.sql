@@ -1,10 +1,10 @@
-CREATE OR REPLACE STREAM "most_popular_items_output_stream" (
+CREATE OR REPLACE STREAM "items_output_stream" (
     item_id VARCHAR(10),
     total_views DOUBLE
 );
 
 CREATE OR REPLACE PUMP "ITEMS_STREAM_PUMP" AS
-    INSERT INTO "most_popular_items_output_stream"
+    INSERT INTO "items_output_stream"
         SELECT STREAM *
         FROM TABLE (
             TOP_K_ITEMS_TUMBLING(

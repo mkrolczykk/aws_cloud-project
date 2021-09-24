@@ -13,4 +13,5 @@ __pycache__
 *.pyo
 # other
 temp.txt
+src/*.zip
 .DS_Store

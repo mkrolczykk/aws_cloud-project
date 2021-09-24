@@ -2,9 +2,21 @@
     "AWSTemplateFormatVersion": "2010-09-09",
     "Description": "Cloudformation template for Amazon Big Data capstone project",
     "Parameters" : {
-        "LambdaServiceRole": {
+        "LambdaServiceTriggerEmrJobRole": {
             "Type": "String",
-            "Default": "arn:aws:iam::571632058847:role/lambda-role-mkrolczyk"
+            "Default": "arn:aws:iam::571632058847:role/lambda-trigger-emr-job-role-mkrolczyk"
+        },
+        "LambdaServiceFilterIpsRole": {
+            "Type": "String",
+            "Default": "arn:aws:iam::571632058847:role/lambda-filter-ips-role-mkrolczyk"
+        },
+        "LambdaServiceForKinesisViewsAnalyticsOutputRole": {
+            "Type": "String",
+            "Default": "arn:aws:iam::571632058847:role/lambda-kinesis-analytics-output-role-mkrolczyk"
+        },
+        "LambdaServiceItemsAvgRatingsRole": {
+            "Type": "String",
+            "Default": "arn:aws:iam::571632058847:role/lambda-items-avg-ratings-role-mkrolczyk"
         },
         "FirehoseDeliveryStreamRole": {
             "Type": "String",
@@ -55,11 +67,11 @@
         },
         "EC2AMIArn" : {
             "Type" : "String",
-            "Default": "ami-0bd6de9a4728d1a95"
+            "Default": "ami-038f1ca1bd58a5790"
         },
         "EC2KeyName" : {
             "Type" : "String",
-            "Default": "aws_mkrolczyk_EC2_key"
+            "Default": "aws-mkrolczyk-capstone-key"
         },
         "emrSubnetId" : {
             "Type" : "String",
@@ -123,7 +135,7 @@
         },
         "GlueDatabaseName": {
             "Type": "String",
-            "Default": "GlueDatabase-mkrolczyk"
+            "Default": "gluedb-mkrolczyk"
         },
         "S3FilteredDataCrawlerName": {
             "Type": "String",
@@ -137,15 +149,19 @@
     "Resources": {
         "SourceItemViewsStream": {
             "Type": "AWS::Kinesis::Stream",
-            "RetentionPeriodHours": 24,
-            "ShardCount": 1,
-            "Properties": { "Name" : { "Ref" : "SourceItemViewsStreamName" } }
+            "Properties": {
+                "Name" : { "Ref" : "SourceItemViewsStreamName" },
+                "RetentionPeriodHours": 24,
+                "ShardCount": 1
+            }
         },
         "SourceReviewStream": {
             "Type": "AWS::Kinesis::Stream",
-            "RetentionPeriodHours": 24,
-            "ShardCount": 1,
-            "Properties": { "Name" : { "Ref" : "SourceReviewStreamName" } }
+            "Properties": {
+                "Name" : { "Ref" : "SourceReviewStreamName" },
+                "RetentionPeriodHours": 24,
+                "ShardCount": 1
+            }
         },
         "DataBucket": {
             "Type": "AWS::S3::Bucket",
@@ -180,7 +196,7 @@
                 "Action": "lambda:InvokeFunction",
                 "Principal": "s3.amazonaws.com",
                 "SourceAccount": { "Ref": "AWS::AccountId" },
-                "SourceArn": { "Fn::Sub": "arn:aws:s3:::${S3BucketName}" }
+                "SourceArn": { "Fn::Sub": "arn:aws:s3:::${S3DataBucketName}" }
             }
         },
         "LambdaServiceItemsAvgRatingsPermission": {
@@ -190,13 +206,18 @@
                 "Action": "lambda:InvokeFunction",
                 "Principal": "s3.amazonaws.com",
                 "SourceAccount": { "Ref": "AWS::AccountId" },
-                "SourceArn": { "Fn::Sub": "arn:aws:s3:::${S3BucketName}" }
+                "SourceArn": { "Fn::Sub": "arn:aws:s3:::${S3DataBucketName}" }
             }
         },
         "Ec2Instance": {
             "Type": "AWS::EC2::Instance",
             "Properties": {
-                "AssociatePublicIpAddress": "true",
+                "NetworkInterfaces": [
+                    {
+                        "AssociatePublicIpAddress": true,
+                        "DeviceIndex": 0
+                    }
+                ],
                 "KeyName": { "Ref" : "EC2KeyName" },
                 "InstanceType": { "Ref" : "EC2InstanceType" },
                 "ImageId": { "Ref" : "EC2AMIArn" }
@@ -206,7 +227,7 @@
             "Type": "AWS::Lambda::Function",
             "Properties": {
                 "FunctionName": { "Ref" : "LambdaServiceTriggerEmrJobName" },
-                "Role": { "Ref" : "LambdaServiceRole" },
+                "Role": { "Ref" : "LambdaServiceTriggerEmrJobRole" },
                 "Environment": {
                     "Variables": {
                         "S3ResourcesBucketName": { "Ref" : "S3ResourcesBucketName" },
@@ -267,6 +288,10 @@
                     {
                         "AttributeName": "item_id",
                         "KeyType": "HASH"
+                    },
+                    {
+                        "AttributeName": "total_views",
+                        "KeyType": "RANGE"
                     }
                 ],
                 "AttributeDefinitions": [
@@ -297,6 +322,10 @@
                     {
                         "AttributeName": "category",
                         "KeyType": "HASH"
+                    },
+                    {
+                        "AttributeName": "total_views",
+                        "KeyType": "RANGE"
                     }
                 ],
                 "AttributeDefinitions": [
@@ -353,7 +382,7 @@
             "Type": "AWS::Lambda::Function",
             "Properties": {
                 "FunctionName": { "Ref" : "LambdaServiceFilterIpFunctionName" },
-                "Role": {"Ref" : "LambdaServiceRole"},
+                "Role": { "Ref" : "LambdaServiceFilterIpsRole" },
                 "Environment": {
                     "Variables": {
                         "DynamoDB_table": { "Ref" : "DynamoDBSuspiciousIpsTableName" },
@@ -372,9 +401,9 @@
         },
         "ItemsEventTrigger": {
             "Type": "AWS::Lambda::EventSourceMapping",
-            "StartingPosition": "LATEST",
-            "FunctionName": { "Fn::GetAtt": ["LambdaServiceFilterIpsFunction", "Arn"] },
             "Properties": {
+                "StartingPosition": "LATEST",
+                "FunctionName": { "Fn::GetAtt": ["LambdaServiceFilterIpsFunction", "Arn"] },
                 "EventSourceArn": {
                     "Fn::Join": [
                         "",
@@ -398,9 +427,9 @@
         },
         "ReviewsEventTrigger": {
             "Type": "AWS::Lambda::EventSourceMapping",
-            "StartingPosition": "LATEST",
-            "FunctionName": { "Fn::GetAtt": ["LambdaServiceFilterIpsFunction", "Arn"] },
             "Properties": {
+                "StartingPosition": "LATEST",
+                "FunctionName": { "Fn::GetAtt": ["LambdaServiceFilterIpsFunction", "Arn"] },
                 "EventSourceArn": {
                     "Fn::Join": [
                         "",
@@ -429,9 +458,9 @@
                 "S3DestinationConfiguration": {
                     "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
                     "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" },
-                    "BufferingHints": { "IntervalInSeconds": 60}
-                },
-                "Prefix": "views_filtered_data/"
+                    "BufferingHints": { "IntervalInSeconds": 60},
+                    "Prefix": "views_filtered_data/"
+                }
             }
         },
         "FirehouseReviewsDeliveryStream": {
@@ -441,9 +470,9 @@
                 "S3DestinationConfiguration": {
                     "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
                     "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" },
-                    "BufferingHints": { "IntervalInSeconds": 60}
-                },
-                "Prefix": "reviews_filtered_data/"
+                    "BufferingHints": { "IntervalInSeconds": 60},
+                    "Prefix": "reviews_filtered_data/"
+                }
             }
         },
         "KinesisViewsAnalytics": {
@@ -493,12 +522,12 @@
                         "NamePrefix": "firehouse_views_delivery_stream"
                     }
                 ],
-                "ApplicationCode": "CREATE OR REPLACE STREAM \"most_popular_items_output_stream\"( item_id VARCHAR(10), total_views DOUBLE); CREATE OR REPLACE PUMP \"ITEMS_STREAM_PUMP\" AS INSERT INTO \"most_popular_items_output_stream\" SELECT STREAM * FROM TABLE ( TOP_K_ITEMS_TUMBLING( CURSOR( SELECT STREAM * FROM \"firehouse_views_delivery_stream_001\" ), 'item_id', 10, 60 ) ); CREATE OR REPLACE STREAM \"most_popular_categories_output_stream\" ( category VARCHAR(50), total_views DOUBLE ); CREATE OR REPLACE PUMP \"CATEGORIES_STREAM_PUMP\" AS INSERT INTO \"most_popular_categories_output_stream\" SELECT STREAM * FROM TABLE ( TOP_K_ITEMS_TUMBLING( CURSOR( SELECT STREAM * FROM \"firehouse_views_delivery_stream_001\" AS f JOIN \"items_information\" AS i IN f.\"item_id\" = i.\"item_id\"; ), 'category', 10, 60 ) );"
+                "ApplicationCode": "CREATE OR REPLACE STREAM \"items_output_stream\"( item_id VARCHAR(10), total_views DOUBLE); CREATE OR REPLACE PUMP \"ITEMS_STREAM_PUMP\" AS INSERT INTO \"items_output_stream\" SELECT STREAM * FROM TABLE ( TOP_K_ITEMS_TUMBLING( CURSOR( SELECT STREAM * FROM \"firehouse_views_delivery_stream_001\" ), 'item_id', 10, 60 ) ); CREATE OR REPLACE STREAM \"categories_output_stream\" ( category VARCHAR(50), total_views DOUBLE ); CREATE OR REPLACE PUMP \"CATEGORIES_STREAM_PUMP\" AS INSERT INTO \"categories_output_stream\" SELECT STREAM * FROM TABLE ( TOP_K_ITEMS_TUMBLING( CURSOR( SELECT STREAM * FROM \"firehouse_views_delivery_stream_001\" AS f JOIN \"items_information\" AS i IN f.\"item_id\" = i.\"item_id\"; ), 'category', 10, 60 ) );"
             }
         },
         "KinesisAnalyticsApplicationReferenceDataSource": {
             "Type": "AWS::KinesisAnalytics::ApplicationReferenceDataSource",
-            "DependsOn": { "Ref" : "KinesisViewsAnalytics" },
+            "DependsOn": "KinesisViewsAnalytics",
             "Properties": {
                 "ApplicationName": { "Ref" : "KinesisViewsAnalytics" },
                 "ReferenceDataSource": {
@@ -532,7 +561,7 @@
                         }
                     },
                     "S3ReferenceDataSource" : {
-                        "BucketARN": { "Fn::GetAtt" : ["S3ResourcesBucketName", "Arn"] },
+                        "BucketARN": "arn:aws:s3:::mkrolczyk-project-resources",
                         "FileKey": "items.csv",
                         "ReferenceRoleARN": { "Ref" : "KinesisAnalyticsRole" }
                     },
@@ -551,7 +580,7 @@
                         "ResourceARN": { "Fn::GetAtt" : ["LambdaServiceForKinesisViewsAnalyticsOutput", "Arn"] },
                         "RoleARN": { "Ref" : "KinesisAnalyticsRole" }
                     },
-                    "Name": "most_popular_items_output_stream"
+                    "Name": "items_output_stream"
                 }
             }
         },
@@ -566,7 +595,7 @@
                         "ResourceARN": { "Fn::GetAtt" : ["LambdaServiceForKinesisViewsAnalyticsOutput", "Arn"] },
                         "RoleARN": { "Ref" : "KinesisAnalyticsRole" }
                     },
-                    "Name": "most_popular_categories_output_stream"
+                    "Name": "categories_output_stream"
                 }
             }
         },
@@ -574,11 +603,13 @@
             "Type": "AWS::Lambda::Function",
             "Properties": {
                 "FunctionName": { "Ref" : "LambdaServiceForKinesisViewsAnalyticsOutputName" },
-                "Role": {"Ref" : "LambdaServiceRole"},
+                "Role": {"Ref" : "LambdaServiceForKinesisViewsAnalyticsOutputRole"},
                 "Environment": {
-                    "SNSTopic": { "Ref" : "SNSHighTrafficTopic" },
-                    "DynamoDBTop10ItemsResultTableName": { "Ref": "DynamoDBTop10ItemsResultTableName" },
-                    "DynamoDBTop10CategoriesResultTableName": { "Ref": "DynamoDBTop10CategoriesResultTableName" }
+                    "Variables": {
+                        "SNSTopic": { "Ref": "SNSHighTrafficTopic" },
+                        "DynamoDBTop10ItemsResultTableName": { "Ref": "DynamoDBTop10ItemsResultTableName" },
+                        "DynamoDBTop10CategoriesResultTableName": { "Ref": "DynamoDBTop10CategoriesResultTableName" }
+                    }
                 },
                 "Code": {
                     "S3Bucket": { "Ref" : "S3ResourcesBucketName" },
@@ -591,9 +622,9 @@
         },
         "SNSHighTrafficTopic": {
             "Type": "AWS::SNS::Topic",
-            "TopicName": "High traffic topic",
-            "DisplayName": "High traffic topic",
             "Properties": {
+                "TopicName": "HighTrafficTopicEmailAlert",
+                "DisplayName": "High traffic topic",
                 "Subscription" : [
                     {
                         "Endpoint" : "mkrolczyk@griddynamics.com",
@@ -662,7 +693,7 @@
             "Type": "AWS::Lambda::Function",
             "Properties": {
                 "FunctionName": { "Ref" : "LambdaServiceItemsAvgRatingsFunctionName" },
-                "Role": {"Ref" : "LambdaServiceRole"},
+                "Role": { "Ref" : "LambdaServiceItemsAvgRatingsRole" },
                 "Environment": {
                     "Variables": {
                         "DynamoDBAvgRatingsTableName": { "Ref" : "DynamoDBAvgRatingsTableName"},
