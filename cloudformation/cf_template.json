@@ -137,9 +137,13 @@
             "Type": "String",
             "Default": "gluedb-mkrolczyk"
         },
-        "S3FilteredDataCrawlerName": {
+        "S3FilteredViewsCrawlerName": {
             "Type": "String",
-            "Default": "S3FilteredDataCrawler-mkrolczyk"
+            "Default": "S3FilteredViewsCrawler-mkrolczyk"
+        },
+        "S3FilteredReviewsCrawlerName": {
+            "Type": "String",
+            "Default": "S3FilteredReviewsCrawler-mkrolczyk"
         },
         "LambdaServiceItemsAvgRatingsFunctionName": {
             "Type": "String",
@@ -174,14 +178,14 @@
                         {
                             "Event": "s3:ObjectCreated:*",
                             "Filter": {
-                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "views-filtered-data/" }] }
+                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "views/" }] }
                             },
                             "Function": { "Fn::GetAtt": ["LambdaServiceTriggerEmrJob", "Arn"] }
                         },
                         {
                             "Event": "s3:ObjectCreated:*",
                             "Filter": {
-                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "reviews-filtered-data/" }] }
+                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "reviews/" }] }
                             },
                             "Function": { "Fn::GetAtt": ["LambdaServiceItemsAvgRatingsFunction", "Arn"] }
                         }
@@ -458,7 +462,7 @@
                     "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
                     "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" },
                     "BufferingHints": { "IntervalInSeconds": 60, "SizeInMBs": 1},
-                    "Prefix": "views-filtered-data/"
+                    "Prefix": "views/"
                 }
             }
         },
@@ -470,7 +474,7 @@
                     "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
                     "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" },
                     "BufferingHints": { "IntervalInSeconds": 60, "SizeInMBs": 1},
-                    "Prefix": "reviews-filtered-data/"
+                    "Prefix": "reviews/"
                 }
             }
         },
@@ -643,23 +647,36 @@
                 }
             }
         },
-        "S3FilteredDataCrawler": {
+        "S3FilteredViewsCrawler": {
             "Type": "AWS::Glue::Crawler",
             "Properties": {
-                "Name": { "Ref" : "S3FilteredDataCrawlerName" },
+                "Name": { "Ref" : "S3FilteredViewsCrawlerName" },
                 "Role": {"Ref": "glueRole"},
                 "DatabaseName": { "Ref" : "GlueDatabase" },
-                "SchemaChangePolicy": {
-                    "UpdateBehavior": "LOG",
-                    "DeleteBehavior": "LOG"
-                },
                 "Targets": {
                     "S3Targets": [
                         {
-                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/views-filtered-data"]] }
-                        },
+                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/views"]] }
+                        }
+                    ],
+                    "DynamoDBTargets": [
                         {
-                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/reviews-filtered-data"]] }
+                            "Path": { "Ref" : "DynamoDBSuspiciousIpsTableName" }
+                        }
+                    ]
+                }
+            }
+        },
+        "S3FilteredReviewsCrawler": {
+            "Type": "AWS::Glue::Crawler",
+            "Properties": {
+                "Name": { "Ref" : "S3FilteredReviewsCrawlerName" },
+                "Role": {"Ref": "glueRole"},
+                "DatabaseName": { "Ref" : "GlueDatabase" },
+                "Targets": {
+                    "S3Targets": [
+                        {
+                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/reviews"]] }
                         }
                     ],
                     "DynamoDBTargets": [
@@ -676,7 +693,7 @@
                 "Database": { "Ref" : "GlueDatabaseName" },
                 "Name": "DistributionOfViewsByDeviceTypesQuery",
                 "Description": "Calculate distribution of views by device types",
-                "QueryString": "SELECT device_type, COUNT(*) AS views FROM views-filtered-data GROUP BY device_type ORDER BY views DESC;"
+                "QueryString": "SELECT device_type, COUNT(*) AS total_views FROM views GROUP BY device_type ORDER BY total_views DESC;"
             }
         },
         "AthenaItemsAverageRatingsQuery": {
@@ -685,7 +702,7 @@
                 "Database": { "Ref" : "GlueDatabaseName" },
                 "Name": "ItemsAverageRatingsQuery",
                 "Description": "Collect average ratings for items, based on reviews",
-                "QueryString": "SELECT item_id, ROUND(AVG(review_stars), 2) AS rating_average FROM( SELECT * FROM reviews-filtered-data WHERE review_title IS NOT NULL AND review_text IS NOT NULL) GROUP BY item_id ORDER BY rating_average DESC;"
+                "QueryString": "SELECT item_id, ROUND(AVG(review_stars), 2) AS rating_average FROM( SELECT * FROM reviews WHERE review_title IS NOT NULL AND review_text IS NOT NULL) GROUP BY item_id ORDER BY rating_average DESC;"
             }
         },
         "LambdaServiceItemsAvgRatingsFunction": {
@@ -696,7 +713,7 @@
                 "Environment": {
                     "Variables": {
                         "DynamoDBAvgRatingsTableName": { "Ref" : "DynamoDBAvgRatingsTableName"},
-                        "GlueCrawler": { "Ref" : "S3FilteredDataCrawlerName"},
+                        "GlueCrawler": { "Ref" : "S3FilteredReviewsCrawler" },
                         "GlueDB": { "Ref" : "GlueDatabaseName" },
                         "AthenaItemsAverageRatingsQueryId": { "Fn::GetAtt": ["AthenaItemsAverageRatingsQuery", "NamedQueryId"] },
                         "S3Bucket": { "Ref" : "S3DataBucketName" }

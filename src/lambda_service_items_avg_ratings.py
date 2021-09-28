@@ -1,9 +1,6 @@
-#!/usr/bin/env python3
 import boto3
 from botocore.waiter import WaiterModel, create_waiter_with_client
 import os
-
-REGION_NAME = 'us-east-1'
 
 def handler(event, context):
     glue_crawler = os.environ['GlueCrawler']
@@ -16,15 +13,16 @@ def handler(event, context):
     query_result = athena_query(query_id=query_id, glue_db=glue_database, s3_bucket=s3_bucket)
     write_to_dynamodb(dynamodb_table, query_result)
 
-def update_glue_data_catalog(glue_crawler: str):
+def update_glue_data_catalog(glue_crawler):
     glue_client = boto3.client('glue')
+
     waiter_config = {
         'version': 2,
         'waiters': {
-            'CrawlerStatusWaiter': {
-                'delay': 30,
+            'CrawlerWaiter': {
+                'delay': 480,
                 'operation': 'GetCrawler',
-                'maxAttempts': 10,
+                'maxAttempts': 6,
                 'acceptors': [
                     {
                         'expected': True,
@@ -36,13 +34,7 @@ def update_glue_data_catalog(glue_crawler: str):
                         'expected': True,
                         'matcher': 'path',
                         'state': 'failure',
-                        'argument': "Crawler.LastCrawl.Status == 'CANCELLED'"
-                    },
-                    {
-                        'expected': True,
-                        'matcher': 'path',
-                        'state': 'failure',
-                        'argument': "Crawler.LastCrawl.Status == 'FAILED'"
+                        'argument': "Crawler.LastCrawl.Status == 'CANCELLED' | Crawler.LastCrawl.Status == 'FAILED'"
                     }
                 ]
             }
@@ -55,7 +47,7 @@ def update_glue_data_catalog(glue_crawler: str):
         print("Crawler '{0}' already exists".format(glue_crawler))
 
     glue_waiter = create_waiter_with_client(
-        waiter_name='CrawlerStatusWaiter',
+        waiter_name='CrawlerWaiter',
         waiter_model=WaiterModel(waiter_config),
         client=glue_client
     )
@@ -84,19 +76,7 @@ def athena_query(query_id: str, glue_db: str, s3_bucket: str):
                         'expected': True,
                         'matcher': 'path',
                         'state': 'failure',
-                        'argument': "QueryExecution.Status.State == 'QUEUED'"
-                    },
-                    {
-                        'expected': True,
-                        'matcher': 'path',
-                        'state': 'failure',
-                        'argument': "QueryExecution.Status.State == 'CANCELLED'"
-                    },
-                    {
-                        'expected': True,
-                        'matcher': 'path',
-                        'state': 'failure',
-                        'argument': "QueryExecution.Status.State == 'FAILED'"
+                        'argument': "QueryExecution.Status.State == 'QUEUED' | QueryExecution.Status.State == 'CANCELLED' | QueryExecution.Status.State == 'FAILED'"
                     }
                 ]
             }
@@ -118,7 +98,7 @@ def athena_query(query_id: str, glue_db: str, s3_bucket: str):
 
     waiter.wait(QueryExecutionId=scheduled_query_id)
 
-    query_result = athena_client.athena.get_query_results(QueryExecutionId=scheduled_query_id)
+    query_result = athena_client.get_query_results(QueryExecutionId=scheduled_query_id)
 
     return query_result
 
