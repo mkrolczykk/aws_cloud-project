@@ -1,16 +1,16 @@
-import boto3    
+import boto3
 import os
 
 def handler(event, context):
     REGION_NAME = 'us-east-1'
     DYNAMO_DB_TABLE_NAME = os.environ['DynamoDBSuspiciousIdsTable']
-    
+
     S3_RESOURCES_BUCKET = os.environ['S3ResourcesBucketName']
     S3_RESOURCES_KEY = 'spark_emr_job/main.py'
     S3_RESOURCES_URI = 's3://{bucket}/{key}'.format(bucket=S3_RESOURCES_BUCKET, key=S3_RESOURCES_KEY)
 
-    S3_DATA_BUCKET = os.environ['S3DataBucketName']
-    S3_DATA_KEY = 'logs-data'
+    S3_DATA_BUCKET = event['Records'][0]['s3']['bucket']['name']
+    S3_DATA_KEY = event['Records'][0]['s3']['object']['key']
     S3_DATA_URI = 's3://{bucket}/{key}'.format(bucket=S3_DATA_BUCKET, key=S3_DATA_KEY)
 
     client = boto3.client('emr', region_name=REGION_NAME)
@@ -25,14 +25,11 @@ def handler(event, context):
         ],
         Instances={
             'Ec2KeyName': os.environ['EC2KeyName'],
-            'MasterInstanceGroup': {
-                'InstanceCount': os.environ['emrMasterInstanceCount'],
-                'InstanceType': os.environ['emrInstanceType'],
-                'Market': 'ON_DEMAND',
-                'Name': 'master'
-            },
+            'InstanceCount': int(os.environ['emrMasterInstanceCount']),
+            'MasterInstanceType': os.environ['emrInstanceType'],
+            'SlaveInstanceType': os.environ['emrInstanceType'],
             'KeepJobFlowAliveWhenNoSteps': True,
-            'TerminationProtected': os.environ['emrTerminationProtected'],
+            'TerminationProtected': bool(os.environ['emrTerminationProtected']),
             'Ec2SubnetId': os.environ['emrSubnetId']
         },
         VisibleToAllUsers=True,
@@ -48,34 +45,20 @@ def handler(event, context):
         BootstrapActions=[
             {
                 'Name': 'Maximize Spark Default Config',
-                'ScriptBootstrapAction': {
-                    'Path': 's3://support.elasticmapreduce/spark/maximize-spark-default-config',
-                }
+                'ScriptBootstrapAction': {'Path': 's3://support.elasticmapreduce/spark/maximize-spark-default-config'}
             },
+            {
+                'Name': 'Install boto3 before running spark job',
+                'ScriptBootstrapAction': {'Path': 's3://' + S3_RESOURCES_BUCKET + '/install_boto3.sh'}
+            }
         ],
         Steps=[
             {
-                'Name': 'Setup Debugging',
+                'Name': 'Run Spark job',
                 'ActionOnFailure': 'TERMINATE_CLUSTER',
                 'HadoopJarStep': {
                     'Jar': 'command-runner.jar',
-                    'Args': ['state-pusher-script']
-                }
-            },
-            {
-                'Name': 'setup - copy files',
-                'ActionOnFailure': 'CANCEL_AND_WAIT',
-                'HadoopJarStep': {
-                    'Jar': 'command-runner.jar',
-                    'Args': ['aws', 's3', 'cp', S3_RESOURCES_URI, '/home/hadoop/']
-                }
-            },
-            {
-                'Name': 'Run Spark',
-                'ActionOnFailure': 'CANCEL_AND_WAIT',
-                'HadoopJarStep': {
-                    'Jar': 'command-runner.jar',
-                    'Args': ['spark-submit', '/home/hadoop/main.py', S3_DATA_URI, DYNAMO_DB_TABLE_NAME]
+                    'Args': ['spark-submit', S3_RESOURCES_URI, S3_DATA_URI, DYNAMO_DB_TABLE_NAME]
                 }
             }
         ],

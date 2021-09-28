@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import boto3
 import sys
 from pyspark.sql import SparkSession
@@ -17,7 +16,7 @@ def main(s3_uri: str, write_table_name: str):
     write_to_db(result, write_table_name)
 
 def get_data(spark: SparkSession, uri: str):
-    return spark.read.option("header", "true").csv(uri)
+    return spark.read.json(uri)
 
 def identify_ids(df: DataFrame):
     return df \
@@ -38,4 +37,4 @@ def write_to_db(df: DataFrame, table_name: str):
 
 
 if __name__ == "__main__":
-    main(s3_uri=sys.argv[3], write_table_name=sys.argv[4])
+    main(s3_uri=sys.argv[1], write_table_name=sys.argv[2])
