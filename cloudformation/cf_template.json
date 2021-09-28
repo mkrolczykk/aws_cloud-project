@@ -79,7 +79,7 @@
         },
         "emrClusterName" : {
             "Type" : "String",
-            "Default": "emr-cluster-mkrolczyk"
+            "Default": "emr-suspicious-ids-mkrolczyk"
         },
         "emrInstanceType" : {
             "Type" : "String",
@@ -95,7 +95,7 @@
         },
         "emrTerminationProtected" : {
             "Type" : "String",
-            "Default" : "false"
+            "Default" : "False"
         },
         "LambdaServiceFilterIpFunctionName": {
             "Type": "String",
@@ -174,14 +174,14 @@
                         {
                             "Event": "s3:ObjectCreated:*",
                             "Filter": {
-                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "views_filtered_data/" }] }
+                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "views-filtered-data/" }] }
                             },
                             "Function": { "Fn::GetAtt": ["LambdaServiceTriggerEmrJob", "Arn"] }
                         },
                         {
                             "Event": "s3:ObjectCreated:*",
                             "Filter": {
-                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "reviews_filtered_data/" }] }
+                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "reviews-filtered-data/" }] }
                             },
                             "Function": { "Fn::GetAtt": ["LambdaServiceItemsAvgRatingsFunction", "Arn"] }
                         }
@@ -231,7 +231,6 @@
                 "Environment": {
                     "Variables": {
                         "S3ResourcesBucketName": { "Ref" : "S3ResourcesBucketName" },
-                        "S3DataBucketName": { "Ref" : "S3DataBucketName" },
                         "DynamoDBSuspiciousIdsTable": { "Ref" : "DynamoDBSuspiciousIpsTableName" },
                         "emrClusterName": { "Ref" : "emrClusterName" },
                         "EC2KeyName": { "Ref" : "EC2KeyName" },
@@ -251,7 +250,7 @@
                 },
                 "Handler": "lambda_service_trigger_emr_job.handler",
                 "Runtime": "python3.9",
-                "Timeout": 30
+                "Timeout": 120
             }
         },
         "DynamoDBSuspiciousIdsTable": {
@@ -396,7 +395,7 @@
                 },
                 "Handler": "lambda_service_filter.handler",
                 "Runtime": "python3.9",
-                "Timeout": 30
+                "Timeout": 120
             }
         },
         "ItemsEventTrigger": {
@@ -458,8 +457,8 @@
                 "S3DestinationConfiguration": {
                     "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
                     "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" },
-                    "BufferingHints": { "IntervalInSeconds": 60},
-                    "Prefix": "views_filtered_data/"
+                    "BufferingHints": { "IntervalInSeconds": 60, "SizeInMBs": 1},
+                    "Prefix": "views-filtered-data/"
                 }
             }
         },
@@ -470,8 +469,8 @@
                 "S3DestinationConfiguration": {
                     "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
                     "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" },
-                    "BufferingHints": { "IntervalInSeconds": 60},
-                    "Prefix": "reviews_filtered_data/"
+                    "BufferingHints": { "IntervalInSeconds": 60, "SizeInMBs": 1},
+                    "Prefix": "reviews-filtered-data/"
                 }
             }
         },
@@ -617,7 +616,7 @@
                 },
                 "Handler": "lambda_for_kinesis_analytics_output.handler",
                 "Runtime": "python3.9",
-                "Timeout": 30
+                "Timeout": 120
             }
         },
         "SNSHighTrafficTopic": {
@@ -657,10 +656,10 @@
                 "Targets": {
                     "S3Targets": [
                         {
-                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/views_filtered_data"]] }
+                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/views-filtered-data"]] }
                         },
                         {
-                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/reviews_filtered_data"]] }
+                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/reviews-filtered-data"]] }
                         }
                     ],
                     "DynamoDBTargets": [
@@ -677,7 +676,7 @@
                 "Database": { "Ref" : "GlueDatabaseName" },
                 "Name": "DistributionOfViewsByDeviceTypesQuery",
                 "Description": "Calculate distribution of views by device types",
-                "QueryString": "SELECT device_type, COUNT(*) AS views FROM views_filtered_data GROUP BY device_type ORDER BY views DESC;"
+                "QueryString": "SELECT device_type, COUNT(*) AS views FROM views-filtered-data GROUP BY device_type ORDER BY views DESC;"
             }
         },
         "AthenaItemsAverageRatingsQuery": {
@@ -686,7 +685,7 @@
                 "Database": { "Ref" : "GlueDatabaseName" },
                 "Name": "ItemsAverageRatingsQuery",
                 "Description": "Collect average ratings for items, based on reviews",
-                "QueryString": "SELECT item_id, ROUND(AVG(review_stars), 2) AS rating_average FROM( SELECT * FROM reviews_filtered_data WHERE review_title IS NOT NULL AND review_text IS NOT NULL) GROUP BY item_id ORDER BY rating_average DESC;"
+                "QueryString": "SELECT item_id, ROUND(AVG(review_stars), 2) AS rating_average FROM( SELECT * FROM reviews-filtered-data WHERE review_title IS NOT NULL AND review_text IS NOT NULL) GROUP BY item_id ORDER BY rating_average DESC;"
             }
         },
         "LambdaServiceItemsAvgRatingsFunction": {
