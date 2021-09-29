@@ -1,6 +1,6 @@
 CREATE OR REPLACE STREAM "items_output_stream" (
     item_id VARCHAR(10),
-    total_views DOUBLE
+    total_views INTEGER
 );
 
 CREATE OR REPLACE PUMP "ITEMS_STREAM_PUMP" AS

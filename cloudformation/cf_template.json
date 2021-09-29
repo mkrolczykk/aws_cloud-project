@@ -115,11 +115,11 @@
         },
         "DynamoDBTop10ItemsResultTableName": {
             "Type": "String",
-            "Default": "DynamoDBTop10ItemsResultTable-mkrolczyk"
+            "Default": "DynamoDBTop10ItemsResult-mkrolczyk"
         },
         "DynamoDBTop10CategoriesResultTableName": {
             "Type": "String",
-            "Default": "DynamoDBTop10CategoriesResultTable-mkrolczyk"
+            "Default": "DynamoDBTop10CategoriesResult-mkrolczyk"
         },
         "DynamoDBAvgRatingsTableName": {
             "Type": "String",
@@ -148,6 +148,10 @@
         "LambdaServiceItemsAvgRatingsFunctionName": {
             "Type": "String",
             "Default": "LambdaServiceItemsAvgRatingsFunction-mkrolczyk"
+        },
+        "SNSTopicName": {
+            "Type": "String",
+            "Default": "mkrolczyk-SNS-alert"
         }
     },
     "Resources": {
@@ -304,7 +308,7 @@
                     },
                     {
                         "AttributeName": "total_views",
-                        "AttributeType": "S"
+                        "AttributeType": "N"
                     }
                 ],
                 "TimeToLiveSpecification": {
@@ -338,7 +342,7 @@
                     },
                     {
                         "AttributeName": "total_views",
-                        "AttributeType": "S"
+                        "AttributeType": "N"
                     }
                 ],
                 "TimeToLiveSpecification": {
@@ -489,33 +493,38 @@
                             "RecordColumns": [
                                 {
                                     "Name": "device_id",
+                                    "Mapping": "$.device_id",
                                     "SqlType": "VARCHAR(50)"
                                 },
                                 {
                                     "Name": "device_type",
+                                    "Mapping": "$.device_type",
                                     "SqlType": "VARCHAR(50)"
                                 },
                                 {
                                     "Name": "item_id",
+                                    "Mapping": "$.item_id",
                                     "SqlType": "VARCHAR(10)"
                                 },
                                 {
                                     "Name": "ts",
+                                    "Mapping": "$.ts",
                                     "SqlType": "TIMESTAMP"
                                 },
                                 {
                                     "Name": "user_ip",
+                                    "Mapping": "$.user_ip",
                                     "SqlType": "VARCHAR(50)"
                                 }
                             ],
+                            "RecordEncoding": "UTF-8",
                             "RecordFormat": {
                                 "MappingParameters": {
-                                    "CSVMappingParameters": {
-                                        "RecordColumnDelimiter": ",",
-                                        "RecordRowDelimiter": "\n"
+                                    "JSONMappingParameters": {
+                                        "RecordRowPath" : "$"
                                     }
                                 },
-                                "RecordFormatType": "CSV"
+                                "RecordFormatType": "JSON"
                             }
                         },
                         "KinesisFirehoseInput": {
@@ -525,14 +534,14 @@
                         "NamePrefix": "firehouse_views_delivery_stream"
                     }
                 ],
-                "ApplicationCode": "CREATE OR REPLACE STREAM \"items_output_stream\"( item_id VARCHAR(10), total_views DOUBLE); CREATE OR REPLACE PUMP \"ITEMS_STREAM_PUMP\" AS INSERT INTO \"items_output_stream\" SELECT STREAM * FROM TABLE ( TOP_K_ITEMS_TUMBLING( CURSOR( SELECT STREAM * FROM \"firehouse_views_delivery_stream_001\" ), 'item_id', 10, 60 ) ); CREATE OR REPLACE STREAM \"categories_output_stream\" ( category VARCHAR(50), total_views DOUBLE ); CREATE OR REPLACE PUMP \"CATEGORIES_STREAM_PUMP\" AS INSERT INTO \"categories_output_stream\" SELECT STREAM * FROM TABLE ( TOP_K_ITEMS_TUMBLING( CURSOR( SELECT STREAM * FROM \"firehouse_views_delivery_stream_001\" AS f JOIN \"items_information\" AS i IN f.\"item_id\" = i.\"item_id\"; ), 'category', 10, 60 ) );"
+                "ApplicationCode": "CREATE OR REPLACE STREAM \"categories_output_stream\"( category VARCHAR(50), total_views INTEGER); CREATE OR REPLACE PUMP \"CATEGORIES_STREAM_PUMP\" AS INSERT INTO \"categories_output_stream\" SELECT STREAM * FROM TABLE ( TOP_K_ITEMS_TUMBLING( CURSOR( SELECT STREAM * FROM \"firehouse_views_delivery_stream_001\" AS f JOIN \"items_information\" AS i ON f.\"item_id\" = i.\"item_id\" ), 'category', 10, 60 ) ); CREATE OR REPLACE STREAM \"items_output_stream\" ( item_id VARCHAR(10), total_views INTEGER ); CREATE OR REPLACE PUMP \"ITEMS_STREAM_PUMP\" AS INSERT INTO \"items_output_stream\" SELECT STREAM * FROM TABLE ( TOP_K_ITEMS_TUMBLING( CURSOR( SELECT STREAM * FROM \"firehouse_views_delivery_stream_001\" ), 'item_id', 10, 60 ) );"
             }
         },
         "KinesisAnalyticsApplicationReferenceDataSource": {
             "Type": "AWS::KinesisAnalytics::ApplicationReferenceDataSource",
             "DependsOn": "KinesisViewsAnalytics",
             "Properties": {
-                "ApplicationName": { "Ref" : "KinesisViewsAnalytics" },
+                "ApplicationName": { "Ref" : "KinesisViewsAnalyticsName" },
                 "ReferenceDataSource": {
                     "ReferenceSchema" : {
                         "RecordColumns" : [
@@ -604,12 +613,25 @@
         },
         "LambdaServiceForKinesisViewsAnalyticsOutput": {
             "Type": "AWS::Lambda::Function",
+            "DependsOn": "SNSHighTrafficTopic",
             "Properties": {
                 "FunctionName": { "Ref" : "LambdaServiceForKinesisViewsAnalyticsOutputName" },
                 "Role": {"Ref" : "LambdaServiceForKinesisViewsAnalyticsOutputRole"},
                 "Environment": {
                     "Variables": {
-                        "SNSTopic": { "Ref": "SNSHighTrafficTopic" },
+                        "SNSTopic": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "arn:aws:sns:",
+                                    { "Ref": "AWS::Region" },
+                                    ":",
+                                    { "Ref": "AWS::AccountId" },
+                                    ":",
+                                    { "Ref": "SNSTopicName" }
+                                ]
+                            ]
+                        },
                         "DynamoDBTop10ItemsResultTableName": { "Ref": "DynamoDBTop10ItemsResultTableName" },
                         "DynamoDBTop10CategoriesResultTableName": { "Ref": "DynamoDBTop10CategoriesResultTableName" }
                     }
@@ -626,7 +648,7 @@
         "SNSHighTrafficTopic": {
             "Type": "AWS::SNS::Topic",
             "Properties": {
-                "TopicName": "HighTrafficTopicEmailAlert",
+                "TopicName": { "Ref": "SNSTopicName" },
                 "DisplayName": "High traffic topic",
                 "Subscription" : [
                     {

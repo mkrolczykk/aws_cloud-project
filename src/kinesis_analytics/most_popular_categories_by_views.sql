@@ -1,6 +1,6 @@
 CREATE OR REPLACE STREAM "categories_output_stream" (
     category VARCHAR(50),
-    total_views DOUBLE
+    total_views INTEGER
 );
 
 CREATE OR REPLACE PUMP "CATEGORIES_STREAM_PUMP" AS
@@ -12,7 +12,7 @@ CREATE OR REPLACE PUMP "CATEGORIES_STREAM_PUMP" AS
                     SELECT STREAM *
                     FROM "firehouse_views_delivery_stream_001" AS f
                     JOIN "items_information" AS i
-                    IN f."item_id" = i."item_id";
+                    ON f."item_id" = i."item_id"
                 ),
                 'category',
                 10,
