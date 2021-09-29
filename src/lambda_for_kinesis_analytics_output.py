@@ -4,8 +4,6 @@ import base64
 import json
 
 SNS_TOPIC_ARN = os.environ['SNSTopic']
-ITEMS_TABLE_NAME = os.environ['DynamoDBTop10ItemsResultTableName']
-CATEGORIES_TABLE_NAME = os.environ['DynamoDBTop10CategoriesResultTableName']
 
 def handler(event, context):
     sns_client = boto3.client('sns')
@@ -39,4 +37,5 @@ def handler(event, context):
 
     print("Result: {result}".format(result=output_result))
     print("Lambda summary: \nDelivered records: {0}\nFailed records: {1}".format(success_operations, failed_operations))
+
     return {'data': output_result}

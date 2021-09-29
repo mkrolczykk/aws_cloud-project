@@ -62,9 +62,9 @@ def athena_query(query_id: str, glue_db: str, s3_bucket: str):
         'version': 2,
         'waiters': {
             'AthenaQueryStatusWaiter': {
-                'delay': 30,
+                'delay': 120,
                 'operation': 'GetQueryExecution',
-                'maxAttempts': 10,
+                'maxAttempts': 6,
                 'acceptors': [
                     {
                         'expected': True,
