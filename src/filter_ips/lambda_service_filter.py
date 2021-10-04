@@ -3,21 +3,20 @@ import os
 import base64
 import json
 
-
 def handler(event, context):
     dynamodb_client = boto3.resource('dynamodb').Table(os.environ['DynamoDB_table'])
     firehouse_client = boto3.client('firehose')
     curRecordSequenceNumber = ""
-    records = event["Records"]
     decoded_record = None
     output_data = []
 
-    for record in records:
+    for record in event["Records"]:
         try:
             decoded_record = json.loads(base64.b64decode(record['kinesis']['data']))
-            suspicious = dynamodb_client.get_item(  # return empty dict if no ip found in dynamodb suspicious ids table
-                Key={'ip': decoded_record['user_ip']}
-            )
+            if 'review_title' and 'review_text' in decoded_record:
+                decoded_record["review"] = decoded_record["review_title"] + ' ' + decoded_record["review_text"]
+
+            suspicious = dynamodb_client.get_item(Key={'ip': decoded_record['user_ip']})
             if 'Item' not in suspicious:
                 line = {
                     'Data': json.dumps(decoded_record) + '\n'

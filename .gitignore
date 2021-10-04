@@ -13,5 +13,9 @@ __pycache__
 *.pyo
 # other
 temp.txt
-src/*.zip
+src/avg_ratings/*.zip
+src/filter_ips/*.zip
+src/kinesis_analytics/*.zip
+src/sagemaker/*.zip
+src/spark_emr_job/*.zip
 .DS_Store

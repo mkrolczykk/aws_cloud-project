@@ -39,6 +39,19 @@
              "Description": "Glue execution role",
              "Default": "arn:aws:iam::571632058847:role/glue-role-mkrolczyk"
         },
+        "CloudWatchEventRole": {
+            "Type": "String",
+            "Default": "arn:aws:iam::571632058847:role/cloudwatch-event-role-mkrolczyk"
+        },
+        "SageMakerNotebookRole": {
+             "Type": "String",
+             "Description": "SageMaker notebook instance role",
+             "Default": "arn:aws:iam::571632058847:role/sageMakerNotebookRole-mkrolczyk"
+        },
+        "LambdaServiceHandleSagemakerFunctionRole": {
+            "Type": "String",
+            "Default": "arn:aws:iam::571632058847:role/lambda-sagemaker-role-mkrolczyk"
+        },
         "SourceItemViewsStreamName": {
             "Type": "String",
             "Default": "SourceItemViewsStream-mkrolczyk"
@@ -109,6 +122,10 @@
             "Type": "String",
             "Default": "FirehouseReviewsDeliveryStream-mkrolczyk"
         },
+        "FirehouseNoSpamReviewsDeliveryStreamName": {
+            "Type": "String",
+            "Default": "FirehouseNoSpamReviewsDeliveryStream-mkrolczyk"
+        },
         "DynamoDBSuspiciousIpsTableName": {
             "Type": "String",
             "Default": "DynamoDBSuspiciousIpsTable-mkrolczyk"
@@ -152,6 +169,18 @@
         "SNSTopicName": {
             "Type": "String",
             "Default": "mkrolczyk-SNS-alert"
+        },
+        "SageMakerNotebookInstanceName": {
+            "Type": "String",
+            "Default": "SageMakerNotebookInstance-mkrolczyk"
+        },
+        "LambdaServiceHandleSagemakerFunctionName": {
+            "Type": "String",
+            "Default": "LambdaServiceHandleSagemakerFunction-mkrolczyk"
+        },
+        "SageMakerModelName": {
+            "Type": "String",
+            "Default": "reviews-spam-classifier-2021-09-30-09-51-38-839"
         }
     },
     "Resources": {
@@ -189,7 +218,7 @@
                         {
                             "Event": "s3:ObjectCreated:*",
                             "Filter": {
-                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "reviews/" }] }
+                                "S3Key" : { "Rules": [{ "Name": "prefix", "Value": "sagemaker-output/" }] }
                             },
                             "Function": { "Fn::GetAtt": ["LambdaServiceItemsAvgRatingsFunction", "Arn"] }
                         }
@@ -215,6 +244,15 @@
                 "Principal": "s3.amazonaws.com",
                 "SourceAccount": { "Ref": "AWS::AccountId" },
                 "SourceArn": { "Fn::Sub": "arn:aws:s3:::${S3DataBucketName}" }
+            }
+        },
+        "CloudWatchEventPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "FunctionName": { "Fn::GetAtt": ["LambdaServiceHandleSagemakerFunction", "Arn"] },
+                "Action": "lambda:InvokeFunction",
+                "Principal": "events.amazonaws.com",
+                "SourceArn": { "Fn::GetAtt": ["ReviewsCloudWatchEvent", "Arn"] }
             }
         },
         "Ec2Instance": {
@@ -257,7 +295,7 @@
                   "S3Key": "lambda_service_trigger_emr_job.zip"
                 },
                 "Handler": "lambda_service_trigger_emr_job.handler",
-                "Runtime": "python3.9",
+                "Runtime": "python3.8",
                 "Timeout": 120
             }
         },
@@ -402,7 +440,7 @@
                   "S3Key": "lambda_service_filter.zip"
                 },
                 "Handler": "lambda_service_filter.handler",
-                "Runtime": "python3.9",
+                "Runtime": "python3.8",
                 "Timeout": 120
             }
         },
@@ -479,6 +517,18 @@
                     "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" },
                     "BufferingHints": { "IntervalInSeconds": 60, "SizeInMBs": 1},
                     "Prefix": "reviews/"
+                }
+            }
+        },
+        "FirehouseNoSpamReviewsDeliveryStream": {
+            "Type": "AWS::KinesisFirehose::DeliveryStream",
+            "Properties": {
+                "DeliveryStreamName": { "Ref" : "FirehouseNoSpamReviewsDeliveryStreamName" },
+                "S3DestinationConfiguration": {
+                    "BucketARN": { "Fn::GetAtt" : ["DataBucket", "Arn"] },
+                    "RoleARN": { "Ref" : "FirehoseDeliveryStreamRole" },
+                    "BufferingHints": { "IntervalInSeconds": 60, "SizeInMBs": 1},
+                    "Prefix": "sagemaker-output/"
                 }
             }
         },
@@ -641,7 +691,7 @@
                     "S3Key": "lambda_for_kinesis_analytics_output.zip"
                 },
                 "Handler": "lambda_for_kinesis_analytics_output.handler",
-                "Runtime": "python3.9",
+                "Runtime": "python3.8",
                 "Timeout": 120
             }
         },
@@ -698,7 +748,7 @@
                 "Targets": {
                     "S3Targets": [
                         {
-                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/reviews"]] }
+                            "Path": { "Fn::Join": ["", ["s3://", { "Ref" : "S3DataBucketName" }, "/sagemaker-output"]] }
                         }
                     ],
                     "DynamoDBTargets": [
@@ -724,7 +774,7 @@
                 "Database": { "Ref" : "GlueDatabaseName" },
                 "Name": "ItemsAverageRatingsQuery",
                 "Description": "Collect average ratings for items, based on reviews",
-                "QueryString": "SELECT item_id, ROUND(AVG(review_stars), 2) AS rating_average FROM( SELECT * FROM reviews WHERE review_title IS NOT NULL AND review_text IS NOT NULL) GROUP BY item_id ORDER BY rating_average DESC;"
+                "QueryString": "SELECT item_id, ROUND(AVG(review_stars), 2) AS rating_average FROM( SELECT * FROM sagemaker_output WHERE review_title IS NOT NULL AND review_text IS NOT NULL) GROUP BY item_id ORDER BY rating_average DESC;"
             }
         },
         "LambdaServiceItemsAvgRatingsFunction": {
@@ -746,8 +796,63 @@
                   "S3Key": "lambda_service_items_avg_ratings.zip"
                 },
                 "Handler": "lambda_service_items_avg_ratings.handler",
-                "Runtime": "python3.9",
+                "Runtime": "python3.8",
                 "MemorySize": 128,
+                "Timeout": 720
+            }
+        },
+        "SageMakerNotebookInstance": {
+            "Type": "AWS::SageMaker::NotebookInstance",
+            "Properties": {
+                "NotebookInstanceName": { "Ref" : "SageMakerNotebookInstanceName" },
+                "VolumeSizeInGB": 10,
+                "InstanceType": "ml.m4.xlarge",
+                "RoleArn": { "Ref" : "SageMakerNotebookRole" }
+            }
+        },
+        "ReviewsCloudWatchEvent": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "Description": "Start SageMaker when reviews data appears in S3 bucket",
+                "EventPattern": {
+                    "source": ["aws.s3"],
+                    "detail-type": ["AWS API Call via CloudTrail"],
+                    "detail": {
+                        "eventSource": ["s3.amazonaws.com"],
+                        "eventName": ["PutObject"],
+                        "requestParameters": { "bucketName": ["mkrolczyk-data-capstone"], "key": [{ "prefix": "reviews/"}] }
+                    }
+                },
+                "Name": "mkrolczyk-cloudWatch-trigger-event",
+                "RoleArn": { "Ref": "CloudWatchEventRole" },
+                "State": "ENABLED",
+                "Targets": [
+                    {
+                        "Arn": { "Fn::GetAtt": ["LambdaServiceHandleSagemakerFunction", "Arn"] },
+                        "Id": { "Ref" : "LambdaServiceHandleSagemakerFunctionName" }
+                    }
+                ]
+            }
+        },
+        "LambdaServiceHandleSagemakerFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "FunctionName": { "Ref" : "LambdaServiceHandleSagemakerFunctionName" },
+                "Role": { "Ref" : "LambdaServiceHandleSagemakerFunctionRole" },
+                "Layers": ["arn:aws:lambda:us-east-1:571632058847:layer:numpyLibrary:1"],
+                "Environment": {
+                    "Variables": {
+                        "SageMakerModelName": { "Ref": "SageMakerModelName" },
+                        "FirehouseNoSpamReviewsDeliveryStreamName": { "Ref" : "FirehouseNoSpamReviewsDeliveryStreamName" }
+                    }
+                },
+                "Code": {
+                  "S3Bucket": { "Ref" : "S3ResourcesBucketName" },
+                  "S3Key": "lambda_service_sagemaker.zip"
+                },
+                "Handler": "lambda_service_sagemaker.handler",
+                "Runtime": "python3.8",
+                "MemorySize": 8000,
                 "Timeout": 600
             }
         }
