@@ -46,7 +46,7 @@ df[df.columns[0]] = df[df.columns[0]].map({'ham': 0, 'spam': 1})
 targets = df[df.columns[0]].values
 messages = df[df.columns[1]].values
 
-# one hot encoding for each SMS message
+# one hot encoding for each text
 one_hot_data = one_hot_encode(messages, vocabulary_length)
 encoded_messages = vectorize_sequences(one_hot_data, vocabulary_length)
 
@@ -58,8 +58,8 @@ split_index = int(np.ceil(df.shape[0] * 0.8))
 train_set = df2[:split_index]
 val_set = df2[split_index:]
 
-train_set.to_csv('dataset/sms_train_set.csv', header=False, index=False)
-val_set.to_csv('dataset/sms_val_set.csv', header=False, index=False)
+train_set.to_csv('dataset/text_train_set.csv', header=False, index=False)
+val_set.to_csv('dataset/text_val_set.csv', header=False, index=False)
 
 
 # In[203]:
@@ -67,10 +67,10 @@ val_set.to_csv('dataset/sms_val_set.csv', header=False, index=False)
 
 target_bucket = s3.Bucket(bucket_name)
 
-with open('dataset/sms_train_set.csv', 'rb') as data:
+with open('dataset/text_train_set.csv', 'rb') as data:
     target_bucket.upload_fileobj(data, '{0}/train_data/train_set.csv'.format(bucket_key_prefix))
     
-with open('dataset/sms_val_set.csv', 'rb') as data:
+with open('dataset/text_val_set.csv', 'rb') as data:
     target_bucket.upload_fileobj(data, '{0}/validation_data/val_set.csv'.format(bucket_key_prefix))
 
 
