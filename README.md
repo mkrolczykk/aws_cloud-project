@@ -1,4 +1,4 @@
-# [Amazon Big Data GridU course](https://gridu.litmos.com/course/2859381)
+# Big data Amazon Web Services (AWS) project 
 
 Modules description:
 * `cloudformation` - project template for AWS Cloudformation
@@ -14,7 +14,6 @@ _completed_
 
 ## Contact
 
-Created by @mkrolczykG - feel free to contact me!
+Created by @mkrolczyk12 - feel free to contact me!
 
-- Slack: Marcin Krolczyk
-- E-mail: mkrolczyk@griddynamics.com
+- E-mail: m.krolczyk66@gmail.com
